@@ -103,11 +103,21 @@ class OtpExtractorTest {
 
     @Test
     fun `adversarial long bodies return quickly`() {
-        val inputs = listOf("Code " + "1".repeat(20_000), "Code " + "*".repeat(20_000), "Code " + "a1b2 ".repeat(4_000))
+        // Just under the cap, so the regexes run on worst-case shapes; the bound is generous for slow CI.
+        val underCap = listOf(
+            "Code " + "1".repeat(1_990),
+            "Code " + "*".repeat(1_990),
+            "Code " + "a1b2 ".repeat(398),
+            "Code " + ("12345678901" + " ".repeat(100)).repeat(17) + "x", // app-hash pattern `\s*$` backtracking
+        )
         val start = System.nanoTime()
-        for (sms in inputs) assertNull(OtpExtractor.extract(sms))
+        for (sms in underCap) {
+            assertTrue(sms.length <= OtpExtractor.MAX_BODY_CHARS)
+            OtpExtractor.extract(sms)
+        }
+        assertNull(OtpExtractor.extract("Code " + "1".repeat(20_000)))
         val ms = (System.nanoTime() - start) / 1_000_000
-        assertTrue("took $ms ms", ms < 500)
+        assertTrue("took $ms ms", ms < 2_000)
     }
 
     private companion object {

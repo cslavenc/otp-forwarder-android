@@ -46,6 +46,8 @@ class SmsDecisionTest {
     fun `sender not allowed is ignored`() {
         assertEquals(listOf(Ignore(STRANGER)), decide(SmsPart(STRANGER, "Code: 4821", NOW)))
         assertEquals(listOf(Ignore(BANK)), SmsDecision.decide(listOf(SmsPart(BANK, "Code: 4821", NOW)), emptySet(), NOW))
+        // Allowlist before the age check: a stale SMS from a stranger must not be logged as TooOld.
+        assertEquals(listOf(Ignore(STRANGER)), decide(SmsPart(STRANGER, "Code: 4821", NOW - 16 * MINUTE)))
     }
 
     @Test

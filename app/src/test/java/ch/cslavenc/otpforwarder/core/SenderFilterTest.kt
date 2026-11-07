@@ -46,5 +46,6 @@ class SenderFilterTest {
         assertFalse(allowed("+41790000000"))
         assertFalse(allowed("", ""))
         assertFalse(allowed(" ", " ", "723"))
+        assertFalse(allowed("+41790000000", "", " ", "(0)", "-"))
     }
 }
