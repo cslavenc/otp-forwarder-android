@@ -46,6 +46,8 @@ class OtpExtractorTest {
             "Code für die Zahlung vom 2026/11/08: 4821" to "4821",
             "4821 ist Ihr Code. Fragen: 044 123 456 78" to "4821",
             "Your verification code is 482913. If you didn't request this code, call 0800 123 456." to "482913",
+            "Your code is 482913. Never share this code. Ref 7731" to "482913",
+            "Your code is 482913. Our staff will never ask for the code. Reply STOP to 4545" to "482913",
             "482913 ist Ihr Code. Hotline: 0848 888 710" to "482913",
             "482913 ist Ihr mTAN für die Zahlung an CH93 0076 2011 6238 5295 7" to "482913",
             "PostFinance: Code 482913 zur Bestätigung der Zahlung an CH93 0076 2011 6238 5295 7" to "482913",

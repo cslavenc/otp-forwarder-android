@@ -46,8 +46,9 @@ object OtpExtractor {
         val keywords = KEYWORD.findAll(body).toList()
         if (keywords.isEmpty()) return null
         val candidates = candidates(body)
-        // First candidate after the last keyword that has one after it, else the last one before the first keyword.
-        val pick = keywords.asReversed().firstNotNullOfOrNull { kw -> candidates.firstOrNull { it.start > kw.range.last } }
+        // First candidate after the first keyword that has one after it (a repeated "code" in a disclaimer must not
+        // pull in a later number), else the last candidate before the first keyword.
+        val pick = keywords.firstNotNullOfOrNull { kw -> candidates.firstOrNull { it.start > kw.range.last } }
             ?: candidates.lastOrNull { it.end <= keywords.first().range.first }
         return pick?.code?.takeIf { CODE.matches(it) }
     }
