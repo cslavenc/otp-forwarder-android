@@ -103,6 +103,13 @@ class DeliveryTest {
         assertTrue(relay.bodies.isEmpty())
     }
 
+    @Test
+    fun `2xx after the desktop's freshness limit is expired, not sent`() {
+        var t = TS + 108_000
+        val post: suspend (String, Int) -> Int = { _, _ -> t += 13_000; 200 } // slow DNS/connect: ends at ts + 121 s
+        assertEquals(Report.Failed("expired"), runBlocking { Delivery.deliver(BODY, TS, { t }, {}, post) })
+    }
+
     private companion object {
         const val TS = 1_700_000_000_000L
         const val POST_MS = 500L

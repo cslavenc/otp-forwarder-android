@@ -6,6 +6,9 @@ import java.io.IOException
 object Delivery {
     /** Measured from the payload ts; the 10 s margin covers relay latency and clock skew. */
     const val SEND_DEADLINE_MS = 110_000L
+
+    /** The desktop drops messages older than this, so a later 2xx is not a delivery. */
+    const val DESKTOP_MAX_AGE_MS = 120_000L
     const val MAX_ATTEMPT_TIMEOUT_MS = 10_000L
     const val FIRST_DELAY_MS = 1_000L
     const val MAX_DELAY_MS = 15_000L
@@ -49,7 +52,7 @@ object Delivery {
                 null
             }
             when (status?.let(::classify)) {
-                Outcome.SENT -> return Report.Sent
+                Outcome.SENT -> return if (now() > ts + DESKTOP_MAX_AGE_MS) Report.Failed("expired") else Report.Sent
                 Outcome.FAIL -> return Report.Failed("http $status")
                 Outcome.RETRY -> lastError = "http $status"
                 null -> lastError = "network"
