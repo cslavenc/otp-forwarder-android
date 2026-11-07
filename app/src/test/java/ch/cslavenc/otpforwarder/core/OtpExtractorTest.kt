@@ -1,7 +1,10 @@
 package ch.cslavenc.otpforwarder.core
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.random.Random
 
 class OtpExtractorTest {
     private fun check(cases: List<Pair<String, String?>>) {
@@ -53,8 +56,31 @@ class OtpExtractorTest {
             "Votre numéro de vérification : 482913" to "482913",
             "Ihr Code lautet 482\u00A0913" to "482913",
             "Ihr Code lautet 482\u202F913" to "482913",
+            "\uD83D\uDD10 Code: 482913 \uD83D\uDD10" to "482913",
+            "Code:\u200F482913\u200E" to "482913",
         ),
     )
+
+    @Test
+    fun `random and adversarial SMS never yield a malformed code or one without a keyword`() {
+        val random = Random(20261108)
+        repeat(5_000) {
+            val withKeyword = random.nextBoolean()
+            val pool = if (withKeyword) KEYWORD_PIECES + NOISE else NOISE
+            val sms = buildString { repeat(random.nextInt(1, 30)) { append(pool.random(random)) } }
+            val code = try {
+                OtpExtractor.extract(sms)
+            } catch (e: RuntimeException) {
+                throw AssertionError("threw on: $sms", e)
+            }
+            if (!withKeyword) assertNull(sms, code)
+            if (code != null) {
+                assertTrue("$code from: $sms", Regex("[A-Za-z0-9]{4,10}").matches(code))
+                // Grouped codes drop one space or hyphen; nothing else may be invented or reordered.
+                assertTrue("$code from: $sms", sms.filterNot { it == '-' || it.isWhitespace() }.contains(code))
+            }
+        }
+    }
 
     @Test
     fun `returns null without a usable code`() = check(
@@ -74,6 +100,14 @@ class OtpExtractorTest {
     )
 
     private companion object {
+        val KEYWORD_PIECES = listOf("Code", "code: ", "TAN ", "PIN", "otp", "Verif", "Bestätigung", "mot de passe ")
+
+        /** Code-like noise that cannot spell any keyword (no c-o-d-e, t, p, i, v… letters). */
+        val NOISE = listOf(
+            "0", "1", "4", "9", "12", "345", "6789", "482913", "A1b2C3", "a", "Z", "ß", "G-", "CH93", "+41", "00",
+            " ", "\u00A0", "\u202F", "\n", "-", ".", ",", "'", "’", ":", "/", "(", ")", "+", "<#>",
+            "CHF", "€", "$", "****", "•••", "xxxx", "\uD83D\uDD10", "\u200F", "٤", "４", "²", "\uD800",
+        )
         val LONG_SMS = "Sehr geehrte Kundin, sehr geehrter Kunde. Am 07.11.2026 um 09:12 wurde eine Zahlung " +
             "von CHF 2'480.50 an Muster Immobilien AG, Konto CH93 0076 2011 6238 5295 7, Referenz 2026-118, " +
             "erfasst. Falls Sie diese Zahlung nicht kennen, rufen Sie uns an: +41 58 123 45 67. " +
