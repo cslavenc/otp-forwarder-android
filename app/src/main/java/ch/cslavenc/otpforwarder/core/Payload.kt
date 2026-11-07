@@ -24,8 +24,9 @@ object Payload {
     }
 
     /**
-     * Built by hand so the bytes are identical on Android's org.json and the JVM one (key order differs).
-     * id and code are validated to plain ASCII, so only the sender needs quoting.
+     * Built by hand so the key order is fixed. id and code are validated to plain ASCII, so only the sender needs
+     * quoting; Android's JSONObject.quote escapes '/' as "\/" while the JVM jar does not, so bytes can differ for such
+     * senders, but both are valid JSON with the same value.
      */
     fun encode(id: String, code: String, sender: String, ts: Long): ByteArray {
         require(Crypto.isValidToken(id)) { "invalid id" }

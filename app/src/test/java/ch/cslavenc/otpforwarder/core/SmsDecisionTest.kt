@@ -36,6 +36,7 @@ class SmsDecisionTest {
     @Test
     fun `stale SMS is too old, fresh or unknown timestamps are not`() {
         assertEquals(listOf(TooOld(BANK, 16)), decide(SmsPart(BANK, "Code: 4821", NOW - 16 * MINUTE)))
+        assertEquals(listOf(Forward(BANK, "4821")), decide(SmsPart(BANK, "Code: 4821", NOW - 15 * MINUTE)))
         assertEquals(listOf(Forward(BANK, "4821")), decide(SmsPart(BANK, "Code: 4821", NOW - 14 * MINUTE)))
         assertEquals(listOf(Forward(BANK, "4821")), decide(SmsPart(BANK, "Code: 4821", 0)))
         assertEquals(listOf(Forward(BANK, "4821")), decide(SmsPart(BANK, "Code: 4821", NOW + 5 * MINUTE)))

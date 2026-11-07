@@ -37,7 +37,6 @@ android {
 
     lint {
         warningsAsErrors = true
-        abortOnError = true
         disable += setOf(
             // targetSdk 36 is pinned on purpose (see defaultConfig).
             "OldTargetApi",
