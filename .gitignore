@@ -1,3 +1,5 @@
+plan*/
+
 # Gradle / Android Studio
 .gradle/
 build/
@@ -17,3 +19,6 @@ keystore.properties
 # OS
 .DS_Store
 Thumbs.db
+
+# Local planning notes
+plans/
