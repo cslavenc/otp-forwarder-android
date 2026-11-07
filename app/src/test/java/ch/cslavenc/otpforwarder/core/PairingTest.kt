@@ -58,6 +58,8 @@ class PairingTest {
             "https://ntfy.sh?" to ORIGIN_ONLY,
             "https://ntfy.sh/#frag" to ORIGIN_ONLY,
             "https://ntfy.sh#" to ORIGIN_ONLY,
+            "https://ntfy.sh:65536" to "relay port is invalid",
+            "https://ntfy.sh:99999" to "relay port is invalid",
         )
         for ((relay, expected) in cases) assertEquals(relay, expected, reason(json(relay = relay)))
     }

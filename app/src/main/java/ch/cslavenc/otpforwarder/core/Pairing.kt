@@ -10,6 +10,7 @@ import java.util.Locale
 private const val PAIRING_VERSION = 1
 private const val KEY_LEN = 32
 private const val DEFAULT_HTTPS_PORT = 443
+private const val MAX_PORT = 65_535
 private val ROOT_PATHS = setOf("", "/")
 
 /** A validated pairing. [relay] is a normalized https origin without a trailing slash. */
@@ -54,6 +55,7 @@ private fun normalizeRelay(raw: String): Result<String> {
     if (!uri.isAbsolute) return invalid("relay must be an absolute URL")
     if (!uri.scheme.equals("https", ignoreCase = true) || uri.host == null) return invalid("relay must be an https URL")
     if (uri.rawUserInfo != null) return invalid("relay must not contain credentials")
+    if (uri.port !in -1..MAX_PORT) return invalid("relay port is invalid")
     // Checking the raw string also catches an empty "?" or "#", which URI may report as absent.
     if (uri.rawPath !in ROOT_PATHS || '?' in raw || '#' in raw) {
         return invalid("relay must be an origin without path, query or fragment")
