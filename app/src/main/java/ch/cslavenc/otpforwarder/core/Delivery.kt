@@ -21,14 +21,14 @@ object Delivery {
 
     fun classify(httpStatus: Int): Outcome = when (httpStatus) {
         in 200..299 -> Outcome.SENT
-        408, 429, in 500..599 -> Outcome.RETRY
+        -1, 408, 429, in 500..599 -> Outcome.RETRY // -1: response was not valid HTTP
         else -> Outcome.FAIL // includes 3xx: redirects are not followed
     }
 
     /**
      * Posts [body] until it is accepted, rejected, or `ts + 110 s` passes. Every attempt sends the same [body] so the
-     * desktop can dedupe by id; [post] gets a timeout that never exceeds the time left and returns the HTTP status.
-     * Backoff is 1, 2, 4, 8, 15, 15… s.
+     * desktop can dedupe by id. [post] returns the HTTP status and gets `timeoutMs`, the total time budget of that
+     * attempt (connect + response), which never exceeds the time left. Backoff is 1, 2, 4, 8, 15, 15… s.
      */
     suspend fun deliver(
         body: String,

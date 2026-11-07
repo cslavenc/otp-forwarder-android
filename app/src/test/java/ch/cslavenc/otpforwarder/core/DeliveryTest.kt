@@ -7,6 +7,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.IOException
+import kotlin.coroutines.cancellation.CancellationException
 
 class DeliveryTest {
     /** Fake clock: each post costs [POST_MS], each sleep advances the clock. */
@@ -38,8 +39,25 @@ class DeliveryTest {
     @Test
     fun `classify maps HTTP status`() {
         for (s in listOf(200, 204, 299)) assertEquals(Outcome.SENT, Delivery.classify(s))
-        for (s in listOf(408, 429, 500, 503, 599)) assertEquals(Outcome.RETRY, Delivery.classify(s))
+        for (s in listOf(-1, 408, 429, 500, 503, 599)) assertEquals(Outcome.RETRY, Delivery.classify(s))
         for (s in listOf(100, 301, 302, 400, 401, 403, 404, 413, 600)) assertEquals(Outcome.FAIL, Delivery.classify(s))
+    }
+
+    @Test
+    fun `cancellation and unexpected exceptions propagate without retry`() {
+        for (error in listOf(CancellationException("stopped"), IllegalStateException("bug"))) {
+            var posts = 0
+            var t = TS
+            val thrown = runCatching {
+                runBlocking {
+                    Delivery.deliver(BODY, TS, now = { t }, sleep = { t += it }, post = { _, _ -> posts++; throw error })
+                }
+            }.exceptionOrNull()
+            // Not assertSame: coroutine stack-trace recovery may rethrow a copy.
+            assertEquals(error.javaClass, thrown?.javaClass)
+            assertEquals(error.message, thrown?.message)
+            assertEquals(1, posts)
+        }
     }
 
     @Test

@@ -124,8 +124,9 @@ class ForwardWorker(context: Context, params: WorkerParameters) : CoroutineWorke
                 connection.doOutput = true
                 connection.instanceFollowRedirects = false
                 connection.useCaches = false
-                connection.connectTimeout = timeoutMs
-                connection.readTimeout = timeoutMs
+                // timeoutMs is the whole attempt's budget: split it so connect + response cannot overshoot it.
+                connection.connectTimeout = maxOf(1, timeoutMs / 2)
+                connection.readTimeout = maxOf(1, timeoutMs / 2)
                 connection.setRequestProperty("X-Firebase", "no")
                 connection.setRequestProperty("Content-Type", "text/plain; charset=utf-8")
                 connection.setFixedLengthStreamingMode(bytes.size)
