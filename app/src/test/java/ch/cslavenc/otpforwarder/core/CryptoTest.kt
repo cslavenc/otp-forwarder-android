@@ -59,6 +59,14 @@ class CryptoTest {
     }
 
     @Test
+    fun `seal refuses a cipher whose IV or tag length breaks the contract`() {
+        for (spec in listOf(GCMParameterSpec(128, ByteArray(16)), GCMParameterSpec(96, ByteArray(12)))) {
+            val cipher = Cipher.getInstance(Crypto.TRANSFORMATION).apply { init(Cipher.ENCRYPT_MODE, key, spec) }
+            assertThrows(IllegalStateException::class.java) { Crypto.seal(cipher, TOPIC, V1_PLAINTEXT.toByteArray()) }
+        }
+    }
+
+    @Test
     fun `b64Decode accepts padding and rejects non-url alphabet`() {
         assertEquals(32, Crypto.b64Decode("$KEY_B64=")?.size)
         assertEquals(32, Crypto.b64Decode(KEY_B64)?.size)

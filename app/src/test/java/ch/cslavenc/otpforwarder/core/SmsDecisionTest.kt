@@ -28,6 +28,21 @@ class SmsDecisionTest {
     }
 
     @Test
+    fun `interleaved multipart SMS from two allowed senders are joined per sender`() {
+        val decisions = SmsDecision.decide(
+            listOf(
+                SmsPart(BANK, "Ihr Code lautet 48", NOW),
+                SmsPart("PostFinance", "TAN: 77", NOW),
+                SmsPart(BANK, "2913", NOW),
+                SmsPart("PostFinance", "12", NOW),
+            ),
+            ALLOWED + "PostFinance",
+            NOW,
+        )
+        assertEquals(listOf(Forward(BANK, "482913"), Forward("PostFinance", "7712")), decisions)
+    }
+
+    @Test
     fun `sender not allowed is ignored`() {
         assertEquals(listOf(Ignore(STRANGER)), decide(SmsPart(STRANGER, "Code: 4821", NOW)))
         assertEquals(listOf(Ignore(BANK)), SmsDecision.decide(listOf(SmsPart(BANK, "Code: 4821", NOW)), emptySet(), NOW))

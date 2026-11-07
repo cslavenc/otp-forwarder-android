@@ -19,6 +19,8 @@ class SenderFilterTest {
     @Test
     fun `different or incomplete numbers do not match`() {
         assertFalse(allowed("+41790000001", "+41790000000"))
+        assertFalse(allowed("+41790000000", "+4179000000"))
+        assertFalse(allowed("+4179000000", "+41790000000"))
         assertFalse(allowed("41790000000", "+41790000000"))
         assertFalse(allowed("+790000000", "0790000000"))
         assertFalse(allowed("+41723", "0723"))

@@ -32,6 +32,15 @@ class PayloadTest {
     }
 
     @Test
+    fun `a sender cannot inject JSON fields`() {
+        val sender = "\\\",\"code\":\"000000\",\"x\":\"</"
+        val json = JSONObject(String(Payload.encode(Payload.newId(), "482913", sender, 1), Charsets.UTF_8))
+        assertEquals("482913", json.getString("code"))
+        assertEquals(sender, json.getString("sender"))
+        assertEquals(5, json.length())
+    }
+
+    @Test
     fun `worst-case sender stays within 512 bytes and parses back`() {
         val sender = "\u2028".repeat(Payload.MAX_SENDER_CHARS)
         val bytes = Payload.encode(Payload.newId(), "ABCDEFGH12", sender, Long.MAX_VALUE)
