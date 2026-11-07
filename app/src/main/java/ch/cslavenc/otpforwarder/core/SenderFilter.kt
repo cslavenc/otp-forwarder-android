@@ -10,9 +10,9 @@ object SenderFilter {
     /** Trunk "0" plus at least 8 digits, e.g. Swiss 079 123 45 67. */
     private val NATIONAL = Regex("0[1-9][0-9]{7,}")
 
-    /** Drops spaces and phone separators; "00" prefix → "+"; alphanumeric IDs are lower-cased. */
+    /** Drops a "(0)" trunk hint, spaces and phone separators; "00" prefix → "+"; alphanumeric IDs are lower-cased. */
     fun normalize(raw: String): String {
-        val s = raw.filterNot { it.isWhitespace() || it in SEPARATORS }
+        val s = raw.replace("(0)", "").filterNot { it.isWhitespace() || it in SEPARATORS }
         if (!PHONE.matches(s)) return s.lowercase(Locale.ROOT)
         return if (s.startsWith("00")) "+" + s.drop(2) else s
     }

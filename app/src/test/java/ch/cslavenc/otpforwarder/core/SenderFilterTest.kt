@@ -9,7 +9,7 @@ class SenderFilterTest {
 
     @Test
     fun `phone numbers match across formats`() {
-        for (entry in listOf("+41790000000", "+41 79 000 00 00", "0041 79 000 00 00", "079 000 00 00", "0790000000", "079-000.00/00")) {
+        for (entry in listOf("+41790000000", "+41 79 000 00 00", "0041 79 000 00 00", "079 000 00 00", "0790000000", "079-000.00/00", "+41 (0)79 000 00 00")) {
             assertTrue(entry, allowed("+41790000000", entry))
         }
         assertTrue(allowed("0790000000", "+41 79 000 00 00"))
