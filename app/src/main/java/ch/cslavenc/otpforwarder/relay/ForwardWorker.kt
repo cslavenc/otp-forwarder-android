@@ -9,6 +9,7 @@ import androidx.work.CoroutineWorker
 import androidx.work.ForegroundInfo
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.Operation
 import androidx.work.OutOfQuotaPolicy
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
@@ -24,6 +25,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
 import java.net.URI
+import java.util.concurrent.TimeUnit
 
 /** Publishes one sealed body to the relay, retrying the identical body in-process until the delivery deadline. */
 class ForwardWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
@@ -80,34 +82,53 @@ class ForwardWorker(context: Context, params: WorkerParameters) : CoroutineWorke
         private const val CHANNEL_ID = "forwarding"
         private const val NOTIFICATION_ID = 1
 
+        /** Well inside the ~10 s a receiver may run after goAsync(). */
+        private const val ENQUEUE_TIMEOUT_S = 5L
+
         /**
          * Seals [code] for the current pairing, logs QUEUED and enqueues delivery. Shared by the SMS receiver and the
          * test button; runs synchronously (prefs, one Keystore encryption) and never touches the network.
+         * Returns a blocking wait (call it off the main thread) until WorkManager has stored the request, or null if
+         * nothing was enqueued; it logs FAILED "enqueue" if storing failed or timed out.
          */
-        fun forward(context: Context, sender: String, code: String, ts: Long) {
+        fun forward(context: Context, sender: String, code: String, ts: Long): (() -> Unit)? {
             val id = Payload.newId()
             val log = { status: ForwardLog.Status, detail: String ->
                 ForwardLog.add(context, ForwardLog.Entry(id, Payload.cleanSender(sender), ts, status, detail))
             }
             val store = PairingStore(context)
             val (pairing, body) = try {
-                val pairing = store.current() ?: return log(ForwardLog.Status.NOT_PAIRED, "")
+                val pairing = store.current()
+                if (pairing == null) {
+                    log(ForwardLog.Status.NOT_PAIRED, "")
+                    return null
+                }
                 pairing to Crypto.seal(store.encryptCipher(pairing), pairing.topic, Payload.encode(id, code, sender, ts))
             } catch (e: Exception) {
                 if (!isKeystoreFailure(e)) throw e
-                return log(ForwardLog.Status.FAILED, "keystore")
+                log(ForwardLog.Status.FAILED, "keystore")
+                return null
             }
             // Logged before enqueueing so the worker's update always finds the entry.
             log(ForwardLog.Status.QUEUED, "")
-            try {
+            val failed = { ForwardLog.update(context, id, ts, ForwardLog.Status.FAILED, "enqueue") }
+            val operation = try {
                 enqueue(context, id, ts, pairing.relay, pairing.topic, body)
             } catch (e: Exception) {
-                ForwardLog.update(context, id, ts, ForwardLog.Status.FAILED, "enqueue")
+                failed()
+                return null
+            }
+            return {
+                try {
+                    operation.result.get(ENQUEUE_TIMEOUT_S, TimeUnit.SECONDS)
+                } catch (e: Exception) {
+                    failed()
+                }
             }
         }
 
         /** The input holds the ciphertext only, never the code. */
-        private fun enqueue(context: Context, id: String, ts: Long, relay: String, topic: String, body: String) {
+        private fun enqueue(context: Context, id: String, ts: Long, relay: String, topic: String, body: String): Operation {
             val request = OneTimeWorkRequestBuilder<ForwardWorker>()
                 .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
@@ -116,7 +137,7 @@ class ForwardWorker(context: Context, params: WorkerParameters) : CoroutineWorke
                 )
                 .addTag(TAG)
                 .build()
-            WorkManager.getInstance(context).enqueue(request)
+            return WorkManager.getInstance(context).enqueue(request)
         }
 
         /** Returns the HTTP status; throws IOException on network errors. Never logs the URL or body. */

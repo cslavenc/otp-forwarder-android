@@ -46,7 +46,8 @@ object ForwardLog {
                     .put("detail", it.detail),
             )
         }
-        prefs.edit { putString(KEY_LOG, json.toString()) }
+        // commit(): the receiver finishes right after logging QUEUED, and a pending apply() could die with the process.
+        prefs.edit(commit = true) { putString(KEY_LOG, json.toString()) }
     }
 
     /** A corrupt log reads as empty and is overwritten by the next write. */
