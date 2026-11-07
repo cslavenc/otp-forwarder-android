@@ -10,11 +10,11 @@ class SettingsStore(context: Context) {
 
     fun senders(): Set<String> = prefs.getStringSet(KEY_SENDERS, null)?.toSet().orEmpty()
 
-    /** False if [raw] is blank, too long, or already allowed in another spelling. */
+    /** False if [raw] is empty after normalizing, too long, or already allowed in another spelling. */
     fun addSender(raw: String): Boolean {
         val sender = raw.trim()
         val current = senders()
-        if (sender.isEmpty() || sender.length > MAX_SENDER_CHARS) return false
+        if (SenderFilter.normalize(sender).isEmpty() || sender.length > MAX_SENDER_CHARS) return false
         if (current.any { SenderFilter.normalize(it) == SenderFilter.normalize(sender) }) return false
         prefs.edit { putStringSet(KEY_SENDERS, current + sender) }
         return true

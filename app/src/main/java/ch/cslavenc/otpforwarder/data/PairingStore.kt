@@ -52,7 +52,8 @@ class PairingStore(context: Context) {
             ks.deleteEntry(alias)
             throw IOException("could not save pairing")
         }
-        deleteKeys(ks, keep = alias)
+        // The new pairing is committed; a failed cleanup only leaves orphan keys that the next save removes.
+        runCatching { deleteKeys(ks, keep = alias) }
     }
 
     fun clear() {
