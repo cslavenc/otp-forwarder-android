@@ -99,6 +99,15 @@ class OtpExtractorTest {
         ),
     )
 
+    @Test
+    fun `adversarial long bodies return quickly`() {
+        val inputs = listOf("Code " + "1".repeat(20_000), "Code " + "*".repeat(20_000), "Code " + "a1b2 ".repeat(4_000))
+        val start = System.nanoTime()
+        for (sms in inputs) assertNull(OtpExtractor.extract(sms))
+        val ms = (System.nanoTime() - start) / 1_000_000
+        assertTrue("took $ms ms", ms < 500)
+    }
+
     private companion object {
         val KEYWORD_PIECES = listOf("Code", "code: ", "TAN ", "PIN", "otp", "Verif", "Bestätigung", "mot de passe ")
 

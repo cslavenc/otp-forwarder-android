@@ -34,7 +34,12 @@ object OtpExtractor {
 
     private class Candidate(val start: Int, val end: Int, val code: String)
 
+    /** Bounds the regex work in the synchronous SMS receiver; real OTP SMS are far shorter. */
+    const val MAX_BODY_CHARS = 2_000
+
+    /** Null for bodies over [MAX_BODY_CHARS]: a cut-off text could end mid-number and yield a wrong code. */
     fun extract(sms: String): String? {
+        if (sms.length > MAX_BODY_CHARS) return null
         val body = MASKS.fold(UNICODE_SPACE.replace(sms, " ")) { text, mask ->
             mask.replace(text) { " ".repeat(it.value.length) }
         }
@@ -59,10 +64,13 @@ object OtpExtractor {
     }
 
     private fun isPartOfNumber(body: String, c: Candidate): Boolean {
-        val before = body.substring(0, c.start)
-        val after = body.substring(c.end)
+        // Short windows suffice (longest pattern: "SFr. ") and avoid copying the whole body per candidate.
+        val before = body.substring(maxOf(0, c.start - NEIGHBOUR_CHARS), c.start)
+        val after = body.substring(c.end, minOf(body.length, c.end + NEIGHBOUR_CHARS))
         return NUMBER_BEFORE.containsMatchIn(before) ||
             NUMBER_AFTER.containsMatchIn(after) ||
             CURRENCY_BEFORE.containsMatchIn(before)
     }
+
+    private const val NEIGHBOUR_CHARS = 6
 }
