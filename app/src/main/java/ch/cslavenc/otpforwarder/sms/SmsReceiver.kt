@@ -23,13 +23,22 @@ class SmsReceiver : BroadcastReceiver() {
             }
         } ?: return
         for (decision in SmsDecision.decide(parts, SettingsStore(context).senders(), now)) {
-            when (decision) {
-                is SmsDecision.Ignore -> Unit // other senders are not logged
-                is SmsDecision.NoCode -> log(context, decision.sender, now, ForwardLog.Status.NO_CODE, "")
-                is SmsDecision.TooOld ->
-                    log(context, decision.sender, now, ForwardLog.Status.TOO_OLD, "${decision.ageMinutes} min old")
-                is SmsDecision.Forward -> ForwardWorker.forward(context, decision.sender, decision.code, now)
+            // One failing SMS must not crash the process and lose the others; the message could hold the code.
+            try {
+                handle(context, decision, now)
+            } catch (e: Exception) {
+                log(context, decision.sender, now, ForwardLog.Status.FAILED, "internal")
             }
+        }
+    }
+
+    private fun handle(context: Context, decision: SmsDecision, now: Long) {
+        when (decision) {
+            is SmsDecision.Ignore -> Unit // other senders are not logged
+            is SmsDecision.NoCode -> log(context, decision.sender, now, ForwardLog.Status.NO_CODE, "")
+            is SmsDecision.TooOld ->
+                log(context, decision.sender, now, ForwardLog.Status.TOO_OLD, "${decision.ageMinutes} min old")
+            is SmsDecision.Forward -> ForwardWorker.forward(context, decision.sender, decision.code, now)
         }
     }
 

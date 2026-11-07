@@ -99,7 +99,11 @@ class ForwardWorker(context: Context, params: WorkerParameters) : CoroutineWorke
             }
             // Logged before enqueueing so the worker's update always finds the entry.
             log(ForwardLog.Status.QUEUED, "")
-            enqueue(context, id, ts, pairing.relay, pairing.topic, body)
+            try {
+                enqueue(context, id, ts, pairing.relay, pairing.topic, body)
+            } catch (e: Exception) {
+                ForwardLog.update(context, id, ts, ForwardLog.Status.FAILED, "enqueue")
+            }
         }
 
         /** The input holds the ciphertext only, never the code. */
@@ -124,17 +128,15 @@ class ForwardWorker(context: Context, params: WorkerParameters) : CoroutineWorke
                 connection.doOutput = true
                 connection.instanceFollowRedirects = false
                 connection.useCaches = false
-                // timeoutMs is the whole attempt's budget: split it so connect + response cannot overshoot it.
+                // timeoutMs is the attempt's whole budget; splitting it roughly bounds the attempt, and Delivery's
+                // deadline check is the real guard.
                 connection.connectTimeout = maxOf(1, timeoutMs / 2)
                 connection.readTimeout = maxOf(1, timeoutMs / 2)
                 connection.setRequestProperty("X-Firebase", "no")
                 connection.setRequestProperty("Content-Type", "text/plain; charset=utf-8")
                 connection.setFixedLengthStreamingMode(bytes.size)
                 connection.outputStream.use { it.write(bytes) }
-                val status = connection.responseCode
-                val response = if (status >= HttpURLConnection.HTTP_BAD_REQUEST) connection.errorStream else connection.inputStream
-                response?.use { it.readBytes() }
-                return status
+                return connection.responseCode
             } finally {
                 connection.disconnect()
             }
