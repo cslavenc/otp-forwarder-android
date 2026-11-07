@@ -96,7 +96,7 @@ fun MainScreen(refresh: Int) {
             PairingSection(pairing)
             SetupSection(refresh)
             SendersSection(version)
-            ForwardsSection(pairing != null, refresh + version)
+            ForwardsSection(pairing != null, refresh, version)
         }
     }
 }
@@ -136,8 +136,8 @@ private fun PairingSection(pairing: PairingStore.Current?) {
             if (pairing != null) {
                 OutlinedButton(onClick = {
                     message = try {
-                        PairingStore(context).clear()
                         WorkManager.getInstance(context).cancelAllWorkByTag(ForwardWorker.TAG)
+                        PairingStore(context).clear()
                         "Unpaired"
                     } catch (e: Exception) {
                         if (!isKeystoreFailure(e)) throw e
@@ -154,12 +154,14 @@ private fun PairingSection(pairing: PairingStore.Current?) {
 private fun scanQr(context: Context, onMessage: (String) -> Unit) {
     val options = GmsBarcodeScannerOptions.Builder().setBarcodeFormats(Barcode.FORMAT_QR_CODE).build()
     val scanner = GmsBarcodeScanning.getClient(context, options)
-    val unavailable = { _: Exception ->
-        onMessage("Scanner unavailable (needs Google Play services). If it is downloading, try again in a minute.")
-    }
+    val unavailable = { _: Exception -> onMessage("Scanner unavailable (needs Google Play services).") }
     ModuleInstall.getClient(context)
         .installModules(ModuleInstallRequest.newBuilder().addApi(scanner).build())
-        .addOnSuccessListener {
+        .addOnSuccessListener { response ->
+            if (!response.areModulesAlreadyInstalled()) {
+                onMessage("Downloading the scanner. Try again in a moment.")
+                return@addOnSuccessListener
+            }
             scanner.startScan()
                 .addOnSuccessListener { onMessage(applyPairing(context, it.rawValue.orEmpty())) }
                 .addOnFailureListener(unavailable)
@@ -182,6 +184,11 @@ private fun SetupSection(refresh: Int) {
     val hibernationOff = remember(refresh) {
         Build.VERSION.SDK_INT < Build.VERSION_CODES.R || context.packageManager.isAutoRevokeWhitelisted
     }
+    var settingsHint by remember { mutableStateOf("") }
+    val open = { intents: List<Intent> ->
+        val opened = startFirst(context, intents)
+        settingsHint = if (opened) "" else "Could not open Settings. Open Settings > Apps > OTP Forwarder yourself."
+    }
     Section("Setup") {
         Check("SMS permission", smsGranted, "Grant") { requestSms.launch(Manifest.permission.RECEIVE_SMS) }
         if (!smsGranted) {
@@ -190,10 +197,11 @@ private fun SetupSection(refresh: Int) {
                     "then grant again.",
                 style = MaterialTheme.typography.bodySmall,
             )
-            TextButton(onClick = { openAppInfo(context) }) { Text("Open app info") }
+            TextButton(onClick = { open(appInfo(context)) }) { Text("Open app info") }
         }
-        Check("Battery optimization off", batteryExempt, "Allow") { requestBatteryExemption(context) }
-        Check("\"Pause app activity if unused\" off", hibernationOff, "App info") { openAppInfo(context) }
+        Check("Battery optimization off", batteryExempt, "Allow") { open(batteryExemption(context)) }
+        Check("\"Pause app activity if unused\" off", hibernationOff, "Open") { open(unusedAppSettings(context)) }
+        if (settingsHint.isNotEmpty()) Text(settingsHint, color = MaterialTheme.colorScheme.error)
     }
 }
 
@@ -205,19 +213,31 @@ private fun Check(label: String, ok: Boolean, action: String, onAction: () -> Un
     }
 }
 
-// Sideloaded personal app: delayed OTPs defeat its purpose, so ask for the exemption directly.
-@SuppressLint("BatteryLife")
-private fun requestBatteryExemption(context: Context) {
+/** Starts the first intent that resolves; false if none did. */
+private fun startFirst(context: Context, intents: List<Intent>): Boolean = intents.any { intent ->
     try {
-        context.startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, packageUri(context)))
+        context.startActivity(intent)
+        true
     } catch (e: ActivityNotFoundException) {
-        context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+        false
     }
 }
 
-private fun openAppInfo(context: Context) {
-    context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, packageUri(context)))
-}
+// Sideloaded personal app: delayed OTPs defeat its purpose, so ask for the exemption directly.
+@SuppressLint("BatteryLife")
+private fun batteryExemption(context: Context) = listOf(
+    Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, packageUri(context)),
+    Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS),
+)
+
+private fun unusedAppSettings(context: Context): List<Intent> =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        listOf(Intent(Intent.ACTION_AUTO_REVOKE_PERMISSIONS, packageUri(context))) + appInfo(context)
+    } else {
+        appInfo(context)
+    }
+
+private fun appInfo(context: Context) = listOf(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, packageUri(context)))
 
 private fun packageUri(context: Context) = Uri.fromParts("package", context.packageName, null)
 
@@ -252,11 +272,11 @@ private fun SendersSection(version: Int) {
 }
 
 @Composable
-private fun ForwardsSection(paired: Boolean, refresh: Int) {
+private fun ForwardsSection(paired: Boolean, refresh: Int, version: Int) {
     val context = LocalContext.current
     var testCode by remember { mutableStateOf("") }
-    val entries = remember(refresh) { ForwardLog.entries(context) }
-    val now = remember(refresh) { System.currentTimeMillis() }
+    val entries = remember(refresh, version) { ForwardLog.entries(context) }
+    val now = remember(refresh, version) { System.currentTimeMillis() }
     val format = remember { DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.MEDIUM) }
     Section("Recent forwards") {
         Button(enabled = paired, onClick = {
