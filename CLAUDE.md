@@ -23,7 +23,8 @@ SMS ──▶ this Android app ──AES-GCM encrypted──▶ ntfy.sh relay �
 - Once paired, the app works with no UI: an SMS from an allowed sender is forwarded in the background.
 - Distributed as a **sideloaded APK** (personal use). Google Play does not allow `RECEIVE_SMS` for this use case.
 
-> Status: not implemented yet. Build the structure below.
+> Status: v0.1 implemented (see README for install/testing). Design decisions and their reasons were worked out in
+> local `plans/` (gitignored); the outcome is reflected in this file.
 
 ## Ponytail (always on)
 
@@ -39,10 +40,10 @@ starting. End user-facing replies with what was skipped or not checked.
 |------------------|-------------------------------------------------------------------------------------------------|
 | Language         | **Kotlin** 2.x, JVM target 17                                                                    |
 | UI               | **Jetpack Compose** + **Material 3**, single `MainActivity`, no navigation library               |
-| Min / target SDK | **minSdk 26** (Android 8.0); compile/target the latest stable SDK (35+)                          |
-| Build            | Gradle (Kotlin DSL) + version catalog `gradle/libs.versions.toml`, single `app` module, wrapper committed |
+| Min / target SDK | **minSdk 26** (Android 8.0), compileSdk 37, **targetSdk 36 pinned**: targeting 37 makes Android 17 withhold OTP SMS for 3 h |
+| Build            | Gradle 9.9 (Kotlin DSL) + version catalog `gradle/libs.versions.toml`, AGP 9.5 built-in Kotlin, single `app` module, wrapper committed; release APK signed with the debug key, no minify |
 | SMS input        | Manifest `BroadcastReceiver` for `SMS_RECEIVED` + `RECEIVE_SMS` permission (wakes the app, no foreground service) |
-| Delivery         | **WorkManager** expedited one-time work, network constraint, retries until the 2-minute freshness window ends |
+| Delivery         | **WorkManager** expedited one-time work, network constraint, in-worker retry of the identical body until `ts` + 110 s (`core/Delivery`) |
 | HTTP             | Platform `HttpURLConnection` (no OkHttp/Retrofit)                                                 |
 | Encryption       | Platform `javax.crypto` **AES/GCM/NoPadding**, 256-bit key, random 96-bit nonce per message      |
 | Secret storage   | Key imported into **Android Keystore** (non-exportable); topic/relay/settings in `SharedPreferences` |
@@ -58,8 +59,9 @@ Patterns:
   UI) stays thin.
 - **Dependencies stay minimal**: prefer the platform (`javax.crypto`, `java.util.Base64`, `HttpURLConnection`,
   `org.json`, `SharedPreferences`) over libraries. Every new dependency needs **senior-architect** sign-off.
-- **Least privilege**: only `RECEIVE_SMS`, `INTERNET`, `POST_NOTIFICATIONS` (if failures are notified). No
-  `READ_SMS`, no camera, no contacts. `android:allowBackup="false"`; exported components only where Android requires
+- **Least privilege**: only `RECEIVE_SMS`, `INTERNET`, `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` (plus what WorkManager
+  merges: network state, wake lock, boot completed, foreground service for expedited work on API < 31). No
+  `POST_NOTIFICATIONS` (failures show in the in-app log), no `READ_SMS`, no camera, no contacts. `android:allowBackup="false"`; exported components only where Android requires
   it (the SMS receiver, protected by `android.permission.BROADCAST_SMS`).
 - **UI is presentation only**: pairing, status/recent forwards, settings. All security decisions live in `core/` and
   the receiver/worker.
@@ -123,7 +125,7 @@ implementations:
    start implementing the next user story already, since no changes to the business logic are expected at that point.
 8. Once a user story is fully implemented, create a short and precise commit (see git log for examples) and push it
 
-## Repository shape (target)
+## Repository shape
 
 ```
 otp-forwarder-android/
@@ -133,18 +135,20 @@ otp-forwarder-android/
 │       ├── main/
 │       │   ├── AndroidManifest.xml         permissions, SmsReceiver, MainActivity
 │       │   ├── java/ch/cslavenc/otpforwarder/
-│       │   │   ├── MainActivity.kt         Compose host
+│       │   │   ├── MainActivity.kt         Compose host; debug-only pairing import (run-as file drop)
 │       │   │   ├── core/                   pure Kotlin, JVM-testable
 │       │   │   │   ├── Crypto.kt           AES-256-GCM seal, base64url
 │       │   │   │   ├── Pairing.kt          parse + validate the pairing QR JSON
 │       │   │   │   ├── OtpExtractor.kt     find the code in an SMS body
 │       │   │   │   ├── SenderFilter.kt     allowed-sender matching
-│       │   │   │   └── Payload.kt          plaintext JSON {v, id, code, sender, ts}
+│       │   │   │   ├── Payload.kt          plaintext JSON {v, id, code, sender, ts}
+│       │   │   │   ├── SmsDecision.kt      group/join PDUs, allowlist, 15-min stale guard, extract
+│       │   │   │   └── Delivery.kt         status classification + retry loop until ts + 110 s
 │       │   │   ├── data/                   PairingStore (Keystore + prefs), SettingsStore, ForwardLog
-│       │   │   ├── sms/SmsReceiver.kt      SMS_RECEIVED → filter → extract → encrypt → enqueue
+│       │   │   ├── sms/SmsReceiver.kt      SMS_RECEIVED → SmsDecision → encrypt → log QUEUED → enqueue
 │       │   │   ├── relay/ForwardWorker.kt  WorkManager: POST identical body, retry within the window
-│       │   │   └── ui/                     Compose screens: Pairing, Status, Settings
-│       │   └── res/
+│       │   │   └── ui/MainScreen.kt        one screen: pairing, setup checks, senders, recent forwards, test code
+│       │   └── res/                        launcher icon, backup/data-extraction rules (exclude everything)
 │       └── test/                           JVM unit tests for core/ (incl. desktop test vector)
 ├── gradle/libs.versions.toml
 ├── docs/wire-contract.md                   mirror of the desktop contract (desktop copy is authoritative)
@@ -163,7 +167,9 @@ otp-forwarder-android/
 | Lint (must pass)             | `.\gradlew.bat lintDebug`                                            |
 | All checks                   | `.\gradlew.bat check`                                                |
 | Install on a device/emulator | `adb install -r app\build\outputs\apk\debug\app-debug.apk`           |
+| Release APK (real phone)     | `.\gradlew.bat assembleRelease` → `app\build\outputs\apk\release\app-release.apk` |
 | Fake an SMS (emulator only)  | `adb emu sms send +41000000000 "Your code is 123456"`                |
+| Pair the emulator (debug)    | `$json \| adb exec-in "run-as ch.cslavenc.otpforwarder sh -c 'cat > files/debug-pairing.json'"`, then bring the app to the foreground |
 
 Prerequisites: JDK 17 (Android Studio's bundled JBR works), Android SDK (platform + build-tools for the compile SDK,
 platform-tools for `adb`) with `ANDROID_HOME` or `local.properties` `sdk.dir` set. The desktop app is needed for
@@ -212,7 +218,9 @@ This keeps the git log readable and uniform when many agents touch the repo.
   relay and topic. Re-scanning replaces the old pairing; "Unpair" deletes it.
 - Known Android limitations: OEM battery savers (Xiaomi, Huawei, Samsung, …) can delay or kill background work; the
   app should link to battery-optimization settings. Recent Android versions may require "Allow restricted settings" in
-  App info before a sideloaded app can be granted the SMS permission.
+  App info before a sideloaded app can be granted the SMS permission. Android 17 withholds OTP SMS for 3 h from apps
+  targeting API 37 (so never raise `targetSdk` to 37 without re-checking) and holds WebOTP/SMS Retriever format SMS
+  for all apps; SMS whose SMSC timestamp is > 15 min old are logged "Too old" instead of forwarded.
 
 ## Cross-cutting contract (desktop ↔ Android)
 
