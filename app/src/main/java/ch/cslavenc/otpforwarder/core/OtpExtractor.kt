@@ -7,9 +7,20 @@ package ch.cslavenc.otpforwarder.core
 object OtpExtractor {
     private val KEYWORD = Regex(
         "code|codice|passw|kennwort|mot de passe|token|verif|bestätig|freigabe|confirm|conferm|" +
-            "sécurité|sicherheit|sicurezza|\\b(?:m?tan|otp|pin)\\b",
+            "sécurité|sicherheit|sicurezza|vérif|\\b(?:(?:sms|m)?tan|otp|pin)\\b",
         RegexOption.IGNORE_CASE,
     )
+
+    /** Numbers that are never the code; blanked out (same length, so offsets stay valid) before the search. */
+    private val MASKS = listOf(
+        Regex("\\b[A-Z]{2}[0-9]{2}(?: ?[A-Z0-9]{4}){2,7}(?: ?[A-Z0-9]{1,3})?\\b"), // IBAN
+        Regex("(?:\\+|\\b00)[0-9](?:[ ./()-]{0,2}[0-9]){6,14}"), // international phone number
+        Regex("\\b0[0-9](?:[ ./-]?[0-9]){8}\\b"), // 10-digit national phone number, e.g. 0800 123 456
+        Regex("[0-9][0-9'’.,]* ?(?:CHF|EUR|USD|GBP|[€\$£])(?![A-Za-z])"), // amount followed by its currency
+        Regex("(?:[*•]{2,}|[xX]{4,})[0-9]{2,6}"), // masked card number
+        Regex("(?<![A-Za-z0-9+/])[A-Za-z0-9+/]{11}\\s*$"), // SMS Retriever app hash
+    )
+    private val UNICODE_SPACE = Regex("\\p{Z}")
     private val PLAIN = Regex("(?<![\\p{L}\\p{N}])[A-Za-z0-9]{4,10}(?![\\p{L}\\p{N}])")
 
     /** "482 913" or "123-456", but not a slice of a longer group such as a phone number. */
@@ -23,7 +34,10 @@ object OtpExtractor {
 
     private class Candidate(val start: Int, val end: Int, val code: String)
 
-    fun extract(body: String): String? {
+    fun extract(sms: String): String? {
+        val body = MASKS.fold(UNICODE_SPACE.replace(sms, " ")) { text, mask ->
+            mask.replace(text) { " ".repeat(it.value.length) }
+        }
         val keywords = KEYWORD.findAll(body).toList()
         if (keywords.isEmpty()) return null
         val candidates = candidates(body)
