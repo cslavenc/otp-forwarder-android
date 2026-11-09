@@ -50,7 +50,7 @@ Must pass `.\gradlew.bat testDebugUnitTest lintDebug assembleDebug` with Kotlin 
 1. Confirm you understand the task.
 2. Locate the exact files/lines and the blast radius.
 3. Implement in coherent steps.
-4. Cover behavior with tests where supported (strategy with **senior-test-engineer** for non-trivial work).
+4. Cover behavior with tests where supported (unit, edge-case, and regression tests for new/changed code).
 5. Run the available checks (`.\gradlew.bat testDebugUnitTest`, `lintDebug`, `assembleDebug`); report concrete results.
 6. Summarize what changed, why, and what the reviewer should look at.
 
