@@ -50,6 +50,18 @@ the desktop repo's authoritative copy).
 
 Requirements: Android 8.0+ with Google Play services (for the QR scanner), and the desktop app installed and running.
 
+### Quick start
+
+With the phone connected (USB or wireless debugging, see [step 2](#2-put-it-on-the-phone)), one command builds the
+release APK and installs it:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\build-install.ps1
+```
+
+Without a connected phone it only builds and copies the APK to `release\otp-forwarder.apk`; transfer it by hand
+(option C). The steps below explain what the script does.
+
 ### 1. Build the APK (on the PC)
 
 Prerequisites: JDK 17 (Android Studio's bundled JBR works) and the Android SDK (Android Studio installs it; set
